@@ -129,7 +129,7 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
   // ─── 领域分组工具状态 ───
   const [allTools, setAllTools] = useState<ToolWithServer[]>([]);
   const [toolsLoading, setToolsLoading] = useState(false);
-  const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
+  const [activeDomainTab, setActiveDomainTab] = useState(0);
   const [showServers, setShowServers] = useState(false);
 
   // Tab 状态：0=MCP工具, 1=技能
@@ -575,7 +575,7 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
                 </Box>
               ) : (
                 <>
-                  {/* ── 领域分组工具卡片 ── */}
+                  {/* ── 领域分组 Tab ── */}
                   {toolsLoading ? (
                     <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
                       <CircularProgress size={24} />
@@ -583,123 +583,114 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
                         加载工具中...
                       </Typography>
                     </Box>
-                  ) : Object.keys(groupedTools).length > 0 ? (
-                    <List disablePadding>
-                      {Object.entries(groupedTools).map(([domain, domainTools]) => {
-                        const domainInfo = DOMAIN_LABELS[domain];
-                        const domainColor = DOMAIN_COLORS[domain] || '#6b7280';
-                        const enabledCount = domainTools.filter(t => !isToolDisabled(t.name, t.serverId)).length;
-                        const isExpanded = expandedDomain === domain;
-
-                        return (
-                          <React.Fragment key={domain}>
-                            {/* 领域卡片 */}
-                            <ListItem
-                              component="div"
-                              onClick={() => setExpandedDomain(isExpanded ? null : domain)}
-                              sx={{
-                                cursor: 'pointer',
-                                py: 1.5,
-                                px: 2,
-                                '&:hover': { bgcolor: alpha(domainColor, 0.04) },
-                              }}
-                            >
-                              <ListItemAvatar sx={{ minWidth: 44 }}>
-                                <Avatar
-                                  sx={{
-                                    bgcolor: alpha(domainColor, 0.12),
-                                    width: 36,
-                                    height: 36,
-                                    fontSize: '1.1rem',
-                                  }}
-                                >
-                                  {domainInfo?.icon || '🔧'}
-                                </Avatar>
-                              </ListItemAvatar>
-                              <ListItemText
-                                primary={
-                                  <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '0.925rem' }}>
-                                    {domainInfo?.zh || domain}
-                                  </Typography>
-                                }
-                                secondary={
-                                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-                                    {domainTools.length} 个工具
-                                  </Typography>
-                                }
-                              />
+                  ) : (() => {
+                    const domainKeys = Object.keys(groupedTools);
+                    if (domainKeys.length === 0) {
+                      return hasActiveServers ? (
+                        <Box sx={{ px: 2, py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                          <Typography variant="body2">活跃服务器暂无可用工具</Typography>
+                        </Box>
+                      ) : null;
+                    }
+                    const safeDomainIdx = Math.min(activeDomainTab, domainKeys.length - 1);
+                    const currentDomain = domainKeys[safeDomainIdx];
+                    const currentTools = groupedTools[currentDomain] || [];
+                    return (
+                      <>
+                        {/* 领域子 Tab 栏 */}
+                        <Box sx={{
+                          display: 'flex',
+                          gap: 0.8,
+                          px: 2,
+                          py: 1,
+                          overflowX: 'auto',
+                          flexShrink: 0,
+                          borderBottom: '1px solid',
+                          borderColor: 'divider',
+                          '&::-webkit-scrollbar': { display: 'none' },
+                        }}>
+                          {domainKeys.map((domain, idx) => {
+                            const info = DOMAIN_LABELS[domain];
+                            const color = DOMAIN_COLORS[domain] || '#6b7280';
+                            const isActive = idx === safeDomainIdx;
+                            const tools = groupedTools[domain];
+                            const enabled = tools.filter(t => !isToolDisabled(t.name, t.serverId)).length;
+                            return (
                               <Chip
-                                label={`${enabledCount}/${domainTools.length}`}
+                                key={domain}
+                                label={`${info?.icon || '🔧'} ${info?.zh || domain} ${enabled}/${tools.length}`}
+                                onClick={() => setActiveDomainTab(idx)}
                                 size="small"
                                 sx={{
-                                  mr: 1,
-                                  height: 22,
-                                  fontSize: '0.75rem',
+                                  flexShrink: 0,
                                   fontWeight: 600,
-                                  bgcolor: enabledCount === domainTools.length
-                                    ? (isDark ? alpha(domainColor, 0.15) : alpha(domainColor, 0.1))
-                                    : (isDark ? alpha('#fff', 0.05) : alpha('#000', 0.04)),
-                                  color: enabledCount === domainTools.length ? domainColor : 'text.secondary',
+                                  fontSize: '0.78rem',
+                                  height: 30,
+                                  cursor: 'pointer',
+                                  bgcolor: isActive
+                                    ? (isDark ? alpha(color, 0.2) : alpha(color, 0.12))
+                                    : 'transparent',
+                                  color: isActive ? color : 'text.secondary',
+                                  border: '1px solid',
+                                  borderColor: isActive
+                                    ? (isDark ? alpha(color, 0.4) : alpha(color, 0.3))
+                                    : 'divider',
+                                  '&:hover': {
+                                    bgcolor: isDark ? alpha(color, 0.15) : alpha(color, 0.08),
+                                  },
                                 }}
                               />
-                              {isExpanded ? <ChevronDown size={18} style={{ opacity: 0.4 }} /> : <ChevronRight size={18} style={{ opacity: 0.4 }} />}
-                            </ListItem>
+                            );
+                          })}
+                        </Box>
 
-                            {/* 展开的工具列表 */}
-                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
-                              <List disablePadding sx={{ bgcolor: isDark ? alpha('#fff', 0.02) : alpha('#000', 0.015) }}>
-                                {domainTools.map((tool) => {
-                                  const disabled = isToolDisabled(tool.name, tool.serverId);
-                                  return (
-                                    <ListItem
-                                      key={`${tool.serverId}-${tool.name}`}
-                                      sx={{
-                                        py: 0.8,
-                                        pl: 4,
-                                        pr: 2,
-                                        opacity: disabled ? 0.5 : 1,
-                                        transition: 'opacity 0.2s',
-                                      }}
-                                      secondaryAction={
-                                        <CustomSwitch
-                                          checked={!disabled}
-                                          onChange={(e) => handleToggleTool(tool.name, tool.serverId, e.target.checked)}
-                                        />
-                                      }
-                                    >
-                                      <ListItemText
-                                        primary={
-                                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
-                                            {tool.name}
-                                          </Typography>
-                                        }
-                                        secondary={
-                                          <Typography variant="caption" sx={{
-                                            color: 'text.secondary',
-                                            display: '-webkit-box',
-                                            WebkitLineClamp: 1,
-                                            WebkitBoxOrient: 'vertical',
-                                            overflow: 'hidden',
-                                          }}>
-                                            {tool.description || tool.serverName}
-                                          </Typography>
-                                        }
-                                      />
-                                    </ListItem>
-                                  );
-                                })}
-                              </List>
-                            </Collapse>
-                            <Divider />
-                          </React.Fragment>
-                        );
-                      })}
-                    </List>
-                  ) : hasActiveServers ? (
-                    <Box sx={{ px: 2, py: 3, textAlign: 'center', color: 'text.secondary' }}>
-                      <Typography variant="body2">活跃服务器暂无可用工具</Typography>
-                    </Box>
-                  ) : null}
+                        {/* 当前领域的工具列表 */}
+                        <List disablePadding sx={{ flex: 1, overflow: 'auto' }}>
+                          {currentTools.map((tool, idx) => {
+                            const disabled = isToolDisabled(tool.name, tool.serverId);
+                            return (
+                              <React.Fragment key={`${tool.serverId}-${tool.name}`}>
+                                <ListItem
+                                  sx={{
+                                    py: 1,
+                                    px: 2,
+                                    opacity: disabled ? 0.5 : 1,
+                                    transition: 'opacity 0.2s',
+                                  }}
+                                  secondaryAction={
+                                    <CustomSwitch
+                                      checked={!disabled}
+                                      onChange={(e) => handleToggleTool(tool.name, tool.serverId, e.target.checked)}
+                                    />
+                                  }
+                                >
+                                  <ListItemText
+                                    primary={
+                                      <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                                        {tool.name}
+                                      </Typography>
+                                    }
+                                    secondary={
+                                      <Typography variant="caption" sx={{
+                                        color: 'text.secondary',
+                                        display: '-webkit-box',
+                                        WebkitLineClamp: 2,
+                                        WebkitBoxOrient: 'vertical',
+                                        overflow: 'hidden',
+                                      }}>
+                                        {tool.description || tool.serverName}
+                                      </Typography>
+                                    }
+                                  />
+                                </ListItem>
+                                {idx < currentTools.length - 1 && <Divider component="li" />}
+                              </React.Fragment>
+                            );
+                          })}
+                        </List>
+                      </>
+                    );
+                  })()}
 
                   {/* ── 服务器管理（可折叠） ── */}
                   <Box sx={{ mt: 1 }}>
