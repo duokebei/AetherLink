@@ -102,11 +102,11 @@ export const BUILTIN_MCP_SERVERS: MCPServer[] = [
     tags: ['DEX', 'Smali', 'APK', '逆向', '编辑', 'Android', '工具']
   },
   {
-    id: 'builtin-ai-search',
-    name: '@aether/ai-search',
+    id: 'builtin-grok-search',
+    name: '@aether/grok-search',
     type: 'inMemory',
     category: 'builtin',
-    description: '通用 AI 搜索工具，支持任何 OpenAI 兼容 API 进行联网搜索。支持多维度搜索（自动拆分复杂查询并行搜索）、智能重试、思考内容过滤',
+    description: 'Grok AI 搜索工具，支持任何 OpenAI 兼容 API 进行联网搜索。支持多维度搜索（自动拆分复杂查询并行搜索）、智能重试、思考内容过滤',
     isActive: false,
     provider: 'AetherAI',
     logoUrl: '',

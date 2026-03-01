@@ -60,7 +60,7 @@ export function createInMemoryMCPServer(name: string, args: string[] = [], envs:
       return searxngServer.server;
     }
 
-    case '@aether/ai-search': {
+    case '@aether/grok-search': {
       return new AiSearchServer(envs).server;
     }
 

@@ -107,7 +107,7 @@ export class AiSearchServer {
 
     this.server = new Server(
       {
-        name: '@aether/ai-search',
+        name: '@aether/grok-search',
         version: '1.0.0'
       },
       {
