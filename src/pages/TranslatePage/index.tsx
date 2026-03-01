@@ -127,8 +127,16 @@ const TranslatePage: React.FC = () => {
   // 状态
   const [sourceText, setSourceText] = useState('');
   const [translatedText, setTranslatedText] = useState('');
-  const [sourceLanguage, setSourceLanguage] = useState<'auto' | string>('auto');
-  const [targetLanguage, setTargetLanguage] = useState<string>(LanguagesEnum.enUS.langCode);
+  const [sourceLanguage, setSourceLanguage] = useState<'auto' | string>(() => {
+    try {
+      return localStorage.getItem('translate_source_language') || 'auto';
+    } catch { return 'auto'; }
+  });
+  const [targetLanguage, setTargetLanguage] = useState<string>(() => {
+    try {
+      return localStorage.getItem('translate_target_language') || LanguagesEnum.enUS.langCode;
+    } catch { return LanguagesEnum.enUS.langCode; }
+  });
   const [isTranslating, setIsTranslating] = useState(false);
   const [copied, setCopied] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
@@ -150,7 +158,18 @@ const TranslatePage: React.FC = () => {
   });
   
   const abortControllerRef = useRef<AbortController | null>(null);
-  
+
+  // 语言选择持久化包装
+  const handleSourceLanguageChange = useCallback((lang: string) => {
+    setSourceLanguage(lang);
+    try { localStorage.setItem('translate_source_language', lang); } catch {}
+  }, []);
+
+  const handleTargetLanguageChange = useCallback((lang: string) => {
+    setTargetLanguage(lang);
+    try { localStorage.setItem('translate_target_language', lang); } catch {}
+  }, []);
+
   // 模型选择处理
   const handleModelSelect = useCallback((model: Model) => {
     setSelectedModel(model);
@@ -309,8 +328,8 @@ const TranslatePage: React.FC = () => {
   const handleSwapLanguages = useCallback(() => {
     if (sourceLanguage === 'auto') return;
     const temp = sourceLanguage;
-    setSourceLanguage(targetLanguage);
-    setTargetLanguage(temp);
+    handleSourceLanguageChange(targetLanguage);
+    handleTargetLanguageChange(temp);
     // 同时交换文本
     setSourceText(translatedText);
     setTranslatedText(sourceText);
@@ -320,8 +339,8 @@ const TranslatePage: React.FC = () => {
   const handleSelectHistory = useCallback((history: TranslateHistory) => {
     setSourceText(history.sourceText);
     setTranslatedText(history.targetText);
-    setSourceLanguage(history.sourceLanguage);
-    setTargetLanguage(history.targetLanguage);
+    handleSourceLanguageChange(history.sourceLanguage);
+    handleTargetLanguageChange(history.targetLanguage);
     setHistoryOpen(false);
   }, []);
 
@@ -563,7 +582,7 @@ const TranslatePage: React.FC = () => {
           bgcolor: 'background.paper',
         }}
       >
-        <LanguageSelector value={sourceLanguage} onChange={setSourceLanguage} showAuto />
+        <LanguageSelector value={sourceLanguage} onChange={handleSourceLanguageChange} showAuto />
         <IconButton
           size="small"
           onClick={handleSwapLanguages}
@@ -572,7 +591,7 @@ const TranslatePage: React.FC = () => {
         >
           <ArrowRightLeft size={18} />
         </IconButton>
-        <LanguageSelector value={targetLanguage} onChange={setTargetLanguage} />
+        <LanguageSelector value={targetLanguage} onChange={handleTargetLanguageChange} />
       </Box>
 
       {/* 内容区域 - 响应式布局 */}
