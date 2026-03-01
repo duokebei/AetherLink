@@ -79,7 +79,14 @@ const SidebarTabsContent = React.memo(function SidebarTabsContent() {
     refreshTopics
   } = useSidebarContext();
 
-  // 移除 getThemeColors，直接使用 CSS Variables
+  // 修复：如果当前 tab 索引指向已关闭的 tab，重置到助手 tab
+  // Tab 布局: 0=助手, 1=话题, [2=工作区], [2/3=笔记], last=设置
+  useEffect(() => {
+    const maxValidIndex = 2 + (showWorkspaceTab ? 1 : 0) + (showNoteTab ? 1 : 0);
+    if (value > maxValidIndex) {
+      setValue(0);
+    }
+  }, [showWorkspaceTab, showNoteTab, value, setValue]);
 
   // 使用useDeferredValue延迟非关键状态更新，提升切换性能
   const deferredValue = useDeferredValue(value);
