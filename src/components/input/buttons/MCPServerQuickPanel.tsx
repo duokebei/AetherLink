@@ -300,10 +300,12 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
   const subTouchStartX = useRef(0);
   const subTouchStartY = useRef(0);
   const handleSubTouchStart = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
     subTouchStartX.current = e.touches[0].clientX;
     subTouchStartY.current = e.touches[0].clientY;
   }, []);
   const handleSubTouchEnd = useCallback((e: React.TouchEvent) => {
+    e.stopPropagation();
     const dx = e.changedTouches[0].clientX - subTouchStartX.current;
     const dy = e.changedTouches[0].clientY - subTouchStartY.current;
     if (Math.abs(dx) > 50 && Math.abs(dx) > Math.abs(dy) * 1.5) {
