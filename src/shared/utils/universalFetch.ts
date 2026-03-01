@@ -273,12 +273,19 @@ function extractHeaders(headers?: HeadersInit): Record<string, string> {
 function createCompatibleResponse(corsBypassResponse: any, _originalUrl: string): UniversalResponse {
   const { data, status, statusText, headers } = corsBypassResponse;
 
+  // HTTP 规范：204, 205, 304 是 null-body status，不允许携带 body
+  // StreamableHTTP MCP 协议中服务器会返回 204 No Content（如通知、session 初始化）
+  const isNullBodyStatus = status === 204 || status === 205 || status === 304;
+
   // 创建一个兼容的Response对象
-  const response = new Response(typeof data === 'string' ? data : JSON.stringify(data), {
-    status,
-    statusText,
-    headers: new Headers(headers)
-  });
+  const response = new Response(
+    isNullBodyStatus ? null : (typeof data === 'string' ? data : JSON.stringify(data)),
+    {
+      status,
+      statusText,
+      headers: new Headers(headers)
+    }
+  );
 
   // 添加额外的数据属性
   (response as UniversalResponse).data = data;

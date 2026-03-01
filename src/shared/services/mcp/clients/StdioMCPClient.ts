@@ -14,12 +14,12 @@ import { Client } from '@modelcontextprotocol/sdk/client/index.js';
 import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 import type { JSONRPCMessage } from '@modelcontextprotocol/sdk/types.js';
 import type { MCPClientOptions, MCPTool, MCPCallToolResponse } from './MCPClientAdapter';
-import { isTauri, isDesktop } from '../../../utils/platformDetection';
+import { isTauri, isDesktop, isWindows } from '../../../utils/platformDetection';
 
 // Tauri Shell 类型定义
 interface TauriChild {
   pid: number;
-  write(data: string | number[]): Promise<void>;
+  write(data: string | Uint8Array | number[]): Promise<void>;
   kill(): Promise<void>;
 }
 
@@ -40,8 +40,7 @@ function mapCommandToScopeName(command: string): { scopeName: string; executable
   }
   if (baseName.includes('npx') || lowerCommand.includes('npx')) {
     // Windows 上 npx 实际是 npx.cmd，优先使用 run-npx-cmd
-    const isWindows = typeof navigator !== 'undefined' && navigator.userAgent.includes('Windows');
-    if (isWindows) {
+    if (isWindows()) {
       return { scopeName: 'run-npx-cmd', executable: 'npx.cmd' };
     }
     return { scopeName: 'run-npx', executable: 'npx' };
@@ -61,6 +60,7 @@ class StdioTransport implements Transport {
   private command: string;
   private args: string[];
   private env: Record<string, string>;
+  private cwd?: string;
   private child: TauriChild | null = null;
   private buffer: string = '';
   private isRunning: boolean = false;
@@ -68,12 +68,15 @@ class StdioTransport implements Transport {
   onmessage?: (message: JSONRPCMessage) => void;
   onerror?: (error: Error) => void;
   onclose?: () => void;
+  /** 子进程退出时的回调，用于通知上层清理缓存 */
+  onProcessExit?: (code: number | null) => void;
 
-  constructor(command: string, args: string[] = [], env: Record<string, string> = {}) {
+  constructor(command: string, args: string[] = [], env: Record<string, string> = {}, cwd?: string) {
     this.command = command;
     this.args = args;
     this.env = env;
-    console.log(`[Stdio Transport] 创建传输，命令: ${command} ${args.join(' ')}`);
+    this.cwd = cwd;
+    console.log(`[Stdio Transport] 创建传输，命令: ${command} ${args.join(' ')}${cwd ? `, 工作目录: ${cwd}` : ''}`);
   }
 
   async start(): Promise<void> {
@@ -88,14 +91,22 @@ class StdioTransport implements Transport {
       console.log(`[Stdio Transport] 使用 scope 命令: ${scopeName}`);
 
       // 创建命令 - 使用 scope 名称
-      const cmd = Command.create(scopeName, this.args, {
+      const spawnOptions: Record<string, any> = {
         env: this.env
-      });
+      };
+      if (this.cwd) {
+        spawnOptions.cwd = this.cwd;
+      }
+      const cmd = Command.create(scopeName, this.args, spawnOptions);
 
       // 监听 close 事件
       cmd.on('close', (data) => {
         console.log(`[Stdio Transport] 子进程退出，代码: ${data.code}`);
         this.isRunning = false;
+        this.child = null;
+        if (this.onProcessExit) {
+          this.onProcessExit(data.code);
+        }
         if (this.onclose) {
           this.onclose();
         }
@@ -156,6 +167,11 @@ class StdioTransport implements Transport {
     }
   }
 
+  /** 检查传输层是否存活 */
+  isAlive(): boolean {
+    return this.isRunning && this.child !== null;
+  }
+
   async send(message: JSONRPCMessage): Promise<void> {
     if (!this.child || !this.isRunning) {
       throw new Error('子进程未运行');
@@ -190,6 +206,7 @@ export interface StdioMCPClientOptions extends Omit<MCPClientOptions, 'baseUrl' 
   command: string;  // 要执行的命令
   args?: string[];  // 命令参数
   env?: Record<string, string>; // 环境变量
+  cwd?: string; // 工作目录
 }
 
 /**
@@ -199,6 +216,8 @@ export class StdioMCPClient {
   private client: Client | null = null;
   private transport: StdioTransport | null = null;
   private options: StdioMCPClientOptions;
+  /** 子进程退出时的回调，用于通知 MCPService 清理缓存 */
+  onProcessExit?: (code: number | null) => void;
 
   constructor(options: StdioMCPClientOptions) {
     this.options = options;
@@ -218,6 +237,13 @@ export class StdioMCPClient {
    */
   static isAvailable(): boolean {
     return isTauri() && isDesktop();
+  }
+
+  /**
+   * 检查连接是否存活
+   */
+  isAlive(): boolean {
+    return this.transport !== null && this.transport.isAlive();
   }
 
   /**
@@ -249,8 +275,17 @@ export class StdioMCPClient {
       this.transport = new StdioTransport(
         this.options.command,
         this.options.args || [],
-        this.options.env || {}
+        this.options.env || {},
+        this.options.cwd
       );
+
+      // 监听子进程退出事件，通知上层清理
+      this.transport.onProcessExit = (code) => {
+        console.log(`[Stdio MCP Client] 子进程退出，code: ${code}`);
+        if (this.onProcessExit) {
+          this.onProcessExit(code);
+        }
+      };
 
       // 连接
       await this.client.connect(this.transport);

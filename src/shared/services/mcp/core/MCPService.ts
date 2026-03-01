@@ -350,13 +350,25 @@ export class MCPService {
 
         const stdioClient = await this.initStdioClient(server);
 
+        // 监听子进程退出事件，自动清理缓存避免复用死连接
+        stdioClient.onProcessExit = (code) => {
+          console.log(`[MCP] stdio 子进程退出 (${server.name})，code: ${code}，清理缓存`);
+          this.clients.delete(serverKey);
+          this.stdioClients.delete(serverKey);
+        };
+
         // 创建一个兼容的 Client 对象
         // 注意：使用类型断言是因为 SDK 的 Client 类型有 60+ 个私有属性，
         // 但我们只需要实现其公共方法接口
         const compatClient = {
           connect: async () => {},
           close: async () => { await stdioClient.close(); },
-          ping: async () => { /* stdio 不支持 ping */ },
+          ping: async () => {
+            // 通过检查子进程是否存活来实现 ping
+            if (!stdioClient.isAlive()) {
+              throw new Error('stdio 子进程已退出');
+            }
+          },
           listTools: async () => {
             const tools = await stdioClient.listTools();
             return { tools };
@@ -555,8 +567,14 @@ export class MCPService {
     // 检查是否已有客户端连接
     const existingClient = this.stdioClients.get(serverKey);
     if (existingClient) {
-      console.log(`[MCP] 复用现有 Stdio 客户端: ${server.name}`);
-      return existingClient;
+      // 检查现有客户端是否仍然存活
+      if (existingClient.isAlive()) {
+        console.log(`[MCP] 复用现有 Stdio 客户端: ${server.name}`);
+        return existingClient;
+      }
+      // 子进程已退出，清理并重建
+      console.warn(`[MCP] Stdio 客户端已失效，重新创建: ${server.name}`);
+      this.stdioClients.delete(serverKey);
     }
 
     // 检查是否有正在初始化的客户端
@@ -575,6 +593,7 @@ export class MCPService {
           command: server.command!,
           args: server.args || [],
           env: server.env || {},
+          cwd: server.cwd,
           timeout: (server.timeout || 60) * 1000
         });
 

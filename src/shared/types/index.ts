@@ -423,6 +423,7 @@ export interface MCPServer {
   timeout?: number;
   // stdio 传输专用字段
   command?: string; // 要执行的命令（如 'npx', 'node', 'python' 等）
+  cwd?: string; // 工作目录（stdio 传输专用）
 }
 
 export interface MCPTool {
