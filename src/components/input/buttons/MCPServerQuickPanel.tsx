@@ -587,7 +587,7 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
                             return (
                               <React.Fragment key={server.id}>
                                 <ListItem
-                                  sx={{ px: 2, py: 1.5 }}
+                                  sx={{ pl: 2, pr: 9, py: 1.5 }}
                                   secondaryAction={
                                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                                       {loadingServers[server.id] && (
@@ -642,7 +642,7 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
                             return (
                               <React.Fragment key={tpl.id}>
                                 <ListItem
-                                  sx={{ px: 2, py: 1.5 }}
+                                  sx={{ pl: 2, pr: 9, py: 1.5 }}
                                   secondaryAction={
                                     added ? (
                                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -701,7 +701,7 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
                             return (
                               <React.Fragment key={tpl.id}>
                                 <ListItem
-                                  sx={{ px: 2, py: 1.5, cursor: added ? 'pointer' : 'default' }}
+                                  sx={{ pl: 2, pr: 9, py: 1.5, cursor: added ? 'pointer' : 'default' }}
                                   onClick={() => added && handleNavigateAssistant(added)}
                                   secondaryAction={
                                     added ? (
