@@ -1,6 +1,6 @@
 import type { PresetModel } from '../types';
 import { ModelType } from '../types';
-import { getProviderIcon, getModelOrProviderIcon } from '../utils/providerIcons';
+import { getProviderIcon } from '../utils/providerIcons';
 
 // 预设模型列表
 export const presetModels: PresetModel[] = [
