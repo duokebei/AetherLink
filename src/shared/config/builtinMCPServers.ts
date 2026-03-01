@@ -102,6 +102,23 @@ export const BUILTIN_MCP_SERVERS: MCPServer[] = [
     tags: ['DEX', 'Smali', 'APK', '逆向', '编辑', 'Android', '工具']
   },
   {
+    id: 'builtin-ai-search',
+    name: '@aether/ai-search',
+    type: 'inMemory',
+    category: 'builtin',
+    description: '通用 AI 搜索工具，支持任何 OpenAI 兼容 API 进行联网搜索。支持多维度搜索（自动拆分复杂查询并行搜索）、智能重试、思考内容过滤',
+    isActive: false,
+    provider: 'AetherAI',
+    logoUrl: '',
+    tags: ['搜索', 'AI', '联网', '工具'],
+    env: {
+      AI_API_URL: '',
+      AI_API_KEY: '',
+      AI_MODEL_ID: '',
+      AI_MAX_QUERY_PLAN: '1',
+    }
+  },
+  {
     id: 'builtin-searxng',
     name: '@aether/searxng',
     type: 'inMemory',
