@@ -112,16 +112,16 @@ export const BUILTIN_MCP_SERVERS: MCPServer[] = [
     logoUrl: '',
     tags: ['搜索', 'AI', '联网', '工具'],
     env: {
-      AI_API_URL: '',
-      AI_API_KEY: '',
-      AI_MODEL_ID: '',
-      AI_ANALYSIS_MODEL_ID: '',
-      AI_TIMEOUT: '60',
-      AI_STREAM: 'true',
-      AI_FILTER_THINKING: 'true',
-      AI_RETRY_COUNT: '1',
-      AI_MAX_QUERY_PLAN: '1',
-      AI_SYSTEM_PROMPT: '',
+      AI_API_URL: '',              // [必填] AI API 地址
+      AI_API_KEY: '',              // [必填] API 密钥
+      AI_MODEL_ID: '',             // [必填] 搜索查询生成模型 ID
+      AI_ANALYSIS_MODEL_ID: '',    // [可选] 搜索结果分析模型 ID，默认同 AI_MODEL_ID
+      AI_TIMEOUT: '60',            // [可选] 超时时间（秒），复杂查询建议 120
+      AI_STREAM: 'true',           // [可选] 是否启用流式响应
+      AI_FILTER_THINKING: 'true',  // [可选] 是否过滤 AI 思考内容
+      AI_RETRY_COUNT: '1',         // [可选] 重试次数（0 = 不重试）
+      AI_MAX_QUERY_PLAN: '1',      // [可选] 复杂查询拆分维度数（建议 3-7）
+      AI_SYSTEM_PROMPT: '',        // [可选] 自定义系统提示词，需保留 {current_time} 占位符
     }
   },
   {
