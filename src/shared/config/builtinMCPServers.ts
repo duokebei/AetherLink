@@ -115,7 +115,13 @@ export const BUILTIN_MCP_SERVERS: MCPServer[] = [
       AI_API_URL: '',
       AI_API_KEY: '',
       AI_MODEL_ID: '',
+      AI_ANALYSIS_MODEL_ID: '',
+      AI_TIMEOUT: '60',
+      AI_STREAM: 'true',
+      AI_FILTER_THINKING: 'true',
+      AI_RETRY_COUNT: '1',
       AI_MAX_QUERY_PLAN: '1',
+      AI_SYSTEM_PROMPT: '',
     }
   },
   {
