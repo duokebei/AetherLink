@@ -1,4 +1,4 @@
-import React, { startTransition, useDeferredValue } from 'react';
+import React, { startTransition, useEffect, useDeferredValue } from 'react';
 import { Box, Tabs, Tab, CircularProgress, IconButton, Tooltip } from '@mui/material';
 import { useSidebarContext } from './SidebarContext';
 import TabPanel, { a11yProps } from './TabPanel';
@@ -8,10 +8,11 @@ import SettingsTab from './SettingsTab/index';
 import NoteTab from './NoteTab/index';
 import WorkspaceTab from './WorkspaceTab/index';
 import { Bot, MessageSquare, Settings, FileText, FolderOpen, Languages } from 'lucide-react';
-import { useSelector } from 'react-redux';
+import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../shared/store';
-import { ENABLE_NOTE_SIDEBAR_KEY } from '../../shared/services/notes/SimpleNoteService';
-import { ENABLE_WORKSPACE_SIDEBAR_KEY } from '../../shared/services/files/WorkspaceService';
+import { updateSettings } from '../../shared/store/settingsSlice';
+import { ENABLE_NOTE_SIDEBAR_KEY, simpleNoteService } from '../../shared/services/notes/SimpleNoteService';
+import { workspaceService, ENABLE_WORKSPACE_SIDEBAR_KEY } from '../../shared/services/files/WorkspaceService';
 import { useNavigate } from 'react-router-dom';
 
 /**
@@ -19,8 +20,29 @@ import { useNavigate } from 'react-router-dom';
  */
 const SidebarTabsContent = React.memo(function SidebarTabsContent() {
   const navigate = useNavigate();
+  const dispatch = useDispatch();
   const showNoteTab = useSelector((state: RootState) => (state.settings as any)[ENABLE_NOTE_SIDEBAR_KEY]);
   const showWorkspaceTab = useSelector((state: RootState) => (state.settings as any)[ENABLE_WORKSPACE_SIDEBAR_KEY]);
+
+  // 启动时从 dexie 同步侧边栏开关状态到 Redux
+  // 修复：redux-persist 的 throttle 可能导致关闭后未持久化，重启后恢复旧值
+  useEffect(() => {
+    const syncSidebarFlags = async () => {
+      try {
+        const [wsEnabled, noteEnabled] = await Promise.all([
+          workspaceService.isSidebarEnabled(),
+          simpleNoteService.isSidebarEnabled(),
+        ]);
+        dispatch(updateSettings({
+          [ENABLE_WORKSPACE_SIDEBAR_KEY]: wsEnabled,
+          [ENABLE_NOTE_SIDEBAR_KEY]: noteEnabled,
+        }));
+      } catch (e) {
+        console.error('[SidebarTabsContent] 同步侧边栏开关失败:', e);
+      }
+    };
+    syncSidebarFlags();
+  }, [dispatch]);
 
   // 计算额外Tab数量，用于调整样式
   const extraTabCount = (showNoteTab ? 1 : 0) + (showWorkspaceTab ? 1 : 0);
