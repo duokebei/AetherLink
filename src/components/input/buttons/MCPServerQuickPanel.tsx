@@ -21,14 +21,15 @@ import {
   Skeleton,
   Tabs,
   Tab,
+  Collapse,
   useTheme
 } from '@mui/material';
 import BackButtonDialog from '../../common/BackButtonDialog';
-import { ArrowLeft, Plug, Server, Wifi, Cpu, Terminal, Cog, Settings, Zap } from 'lucide-react';
+import { ArrowLeft, Plug, Server, Wifi, Cpu, Terminal, Cog, Settings, Zap, ChevronDown, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useSelector, useDispatch } from 'react-redux';
 import type { RootState } from '../../../shared/store';
-import type { MCPServer, MCPServerType } from '../../../shared/types';
+import type { MCPServer, MCPServerType, MCPTool } from '../../../shared/types';
 import type { Skill } from '../../../shared/types/Skill';
 import { mcpService } from '../../../shared/services/mcp';
 import { SkillManager } from '../../../shared/services/skills/SkillManager';
@@ -72,6 +73,33 @@ const SERVER_TYPE_CONFIG = {
   }
 } as const;
 
+// ─── 领域分组常量（与 MCPAssistantDetail 保持一致）───
+function inferDomain(toolName: string): string {
+  if (toolName.includes('knowledge') || toolName.includes('document')) return 'knowledge';
+  if (toolName.includes('appearance') || toolName.includes('theme')) return 'appearance';
+  if (toolName.includes('provider') || toolName.includes('model')) return 'providers';
+  return 'general';
+}
+
+const DOMAIN_LABELS: Record<string, { zh: string; icon: string }> = {
+  knowledge:  { zh: '知识库管理', icon: '📚' },
+  appearance: { zh: '外观设置',   icon: '🎨' },
+  providers:  { zh: '模型管理',   icon: '🧠' },
+  general:    { zh: '通用工具',   icon: '🔧' },
+};
+
+const DOMAIN_COLORS: Record<string, string> = {
+  knowledge: '#8b5cf6',
+  appearance: '#06b6d4',
+  providers: '#f59e0b',
+  general: '#6b7280',
+};
+
+interface ToolWithServer extends MCPTool {
+  serverId: string;
+  serverName: string;
+}
+
 interface MCPServerQuickPanelProps {
   open: boolean;
   onClose: () => void;
@@ -97,6 +125,12 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
   const [loadingServers, setLoadingServers] = useState<Record<string, boolean>>({});
   const [error, setError] = useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+
+  // ─── 领域分组工具状态 ───
+  const [allTools, setAllTools] = useState<ToolWithServer[]>([]);
+  const [toolsLoading, setToolsLoading] = useState(false);
+  const [expandedDomain, setExpandedDomain] = useState<string | null>(null);
+  const [showServers, setShowServers] = useState(false);
 
   // Tab 状态：0=MCP工具, 1=技能
   const [activeTab, setActiveTab] = useState(0);
@@ -249,12 +283,73 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
     }
   }, []);
 
-  // 打开时加载服务器
+  // 加载所有活跃服务器的工具
+  const loadAllTools = useCallback(async (serverList: MCPServer[]) => {
+    const active = serverList.filter(s => s.isActive);
+    if (active.length === 0) { setAllTools([]); return; }
+    setToolsLoading(true);
+    try {
+      const toolsArr: ToolWithServer[] = [];
+      await Promise.all(active.map(async (server) => {
+        try {
+          const tools = await mcpService.listTools(server);
+          tools.forEach(t => toolsArr.push({ ...t, serverId: server.id, serverName: server.name }));
+        } catch { /* 单个服务器失败不影响整体 */ }
+      }));
+      setAllTools(toolsArr);
+    } catch {
+      setAllTools([]);
+    } finally {
+      setToolsLoading(false);
+    }
+  }, []);
+
+  // 按领域分组工具
+  const groupedTools = useMemo(() => {
+    const groups: Record<string, ToolWithServer[]> = {};
+    allTools.forEach(tool => {
+      const domain = inferDomain(tool.name);
+      if (!groups[domain]) groups[domain] = [];
+      groups[domain].push(tool);
+    });
+    return groups;
+  }, [allTools]);
+
+  // 工具是否被禁用
+  const isToolDisabled = useCallback((toolName: string, serverId: string) => {
+    const server = servers.find(s => s.id === serverId);
+    return server?.disabledTools?.includes(toolName) ?? false;
+  }, [servers]);
+
+  // 切换单个工具的启用/禁用
+  const handleToggleTool = useCallback(async (toolName: string, serverId: string, enabled: boolean) => {
+    const server = servers.find(s => s.id === serverId);
+    if (!server) return;
+    const currentDisabled = server.disabledTools || [];
+    const newDisabled = enabled
+      ? currentDisabled.filter(n => n !== toolName)
+      : [...currentDisabled, toolName];
+    try {
+      await mcpService.updateServer({ ...server, disabledTools: newDisabled });
+      loadServers();
+    } catch (err) {
+      console.error('切换工具状态失败:', err);
+    }
+  }, [servers, loadServers]);
+
+  // 打开时加载服务器和工具
   useEffect(() => {
     if (open) {
-      loadServers();
+      loadServers().then(() => {});
     }
   }, [open, loadServers]);
+
+  // 服务器列表变化后重新加载工具
+  useEffect(() => {
+    if (open && servers.length > 0 && !isInitialLoading) {
+      loadAllTools(servers);
+    }
+  }, [open, servers, isInitialLoading, loadAllTools]);
 
   // 切换服务器状态
   const handleToggleServer = useCallback(async (serverId: string, isActive: boolean) => {
@@ -431,7 +526,7 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
               </Box>
             )}
 
-            {/* 可滚动的服务器列表区域 */}
+            {/* 可滚动的工具领域 + 服务器管理区域 */}
             <Box sx={{
               flex: 1,
               overflow: 'auto',
@@ -479,72 +574,222 @@ const MCPServerQuickPanelInner: React.FC<MCPServerQuickPanelProps> = ({
                   </Button>
                 </Box>
               ) : (
-                <List disablePadding>
-                  {servers.map((server, index) => {
-                    const config = getServerConfig(server.type);
-                    const typeColor = config.color;
-                    return (
-                      <React.Fragment key={server.id}>
-                        <ListItem
-                          sx={{
-                            px: 2,
-                            py: 1.5,
-                            '&:active': { bgcolor: alpha(theme.palette.action.active, 0.05) },
-                          }}
-                          secondaryAction={
-                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                              {loadingServers[server.id] && (
-                                <CircularProgress size={16} sx={{ color: 'text.secondary' }} />
-                              )}
-                              <CustomSwitch
-                                checked={server.isActive}
-                                onChange={(e) => handleToggleServer(server.id, e.target.checked)}
-                                disabled={loadingServers[server.id] || false}
-                              />
-                            </Box>
-                          }
-                        >
-                          <ListItemAvatar sx={{ minWidth: 44 }}>
-                            <Avatar
+                <>
+                  {/* ── 领域分组工具卡片 ── */}
+                  {toolsLoading ? (
+                    <Box sx={{ px: 2, py: 3, textAlign: 'center' }}>
+                      <CircularProgress size={24} />
+                      <Typography variant="caption" sx={{ display: 'block', mt: 1, color: 'text.secondary' }}>
+                        加载工具中...
+                      </Typography>
+                    </Box>
+                  ) : Object.keys(groupedTools).length > 0 ? (
+                    <List disablePadding>
+                      {Object.entries(groupedTools).map(([domain, domainTools]) => {
+                        const domainInfo = DOMAIN_LABELS[domain];
+                        const domainColor = DOMAIN_COLORS[domain] || '#6b7280';
+                        const enabledCount = domainTools.filter(t => !isToolDisabled(t.name, t.serverId)).length;
+                        const isExpanded = expandedDomain === domain;
+
+                        return (
+                          <React.Fragment key={domain}>
+                            {/* 领域卡片 */}
+                            <ListItem
+                              component="div"
+                              onClick={() => setExpandedDomain(isExpanded ? null : domain)}
                               sx={{
-                                bgcolor: alpha(typeColor, 0.12),
-                                color: typeColor,
-                                width: 36,
-                                height: 36,
+                                cursor: 'pointer',
+                                py: 1.5,
+                                px: 2,
+                                '&:hover': { bgcolor: alpha(domainColor, 0.04) },
                               }}
                             >
-                              <config.icon size={18} />
-                            </Avatar>
-                          </ListItemAvatar>
-                          <ListItemText
-                            primary={
-                              <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '0.925rem' }}>
-                                {server.name}
-                              </Typography>
-                            }
-                            secondary={
+                              <ListItemAvatar sx={{ minWidth: 44 }}>
+                                <Avatar
+                                  sx={{
+                                    bgcolor: alpha(domainColor, 0.12),
+                                    width: 36,
+                                    height: 36,
+                                    fontSize: '1.1rem',
+                                  }}
+                                >
+                                  {domainInfo?.icon || '🔧'}
+                                </Avatar>
+                              </ListItemAvatar>
+                              <ListItemText
+                                primary={
+                                  <Typography variant="body1" sx={{ fontWeight: 600, fontSize: '0.925rem' }}>
+                                    {domainInfo?.zh || domain}
+                                  </Typography>
+                                }
+                                secondary={
+                                  <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                                    {domainTools.length} 个工具
+                                  </Typography>
+                                }
+                              />
                               <Chip
-                                label={config.label}
+                                label={`${enabledCount}/${domainTools.length}`}
                                 size="small"
                                 sx={{
-                                  mt: 0.5,
-                                  height: 20,
-                                  fontSize: '0.7rem',
-                                  fontWeight: 500,
-                                  bgcolor: alpha(typeColor, 0.08),
-                                  color: typeColor,
-                                  border: 'none',
+                                  mr: 1,
+                                  height: 22,
+                                  fontSize: '0.75rem',
+                                  fontWeight: 600,
+                                  bgcolor: enabledCount === domainTools.length
+                                    ? (isDark ? alpha(domainColor, 0.15) : alpha(domainColor, 0.1))
+                                    : (isDark ? alpha('#fff', 0.05) : alpha('#000', 0.04)),
+                                  color: enabledCount === domainTools.length ? domainColor : 'text.secondary',
                                 }}
                               />
-                            }
-                            secondaryTypographyProps={{ component: 'div' }}
-                          />
-                        </ListItem>
-                        {index < servers.length - 1 && <Divider component="li" />}
-                      </React.Fragment>
-                    );
-                  })}
-                </List>
+                              {isExpanded ? <ChevronDown size={18} style={{ opacity: 0.4 }} /> : <ChevronRight size={18} style={{ opacity: 0.4 }} />}
+                            </ListItem>
+
+                            {/* 展开的工具列表 */}
+                            <Collapse in={isExpanded} timeout="auto" unmountOnExit>
+                              <List disablePadding sx={{ bgcolor: isDark ? alpha('#fff', 0.02) : alpha('#000', 0.015) }}>
+                                {domainTools.map((tool) => {
+                                  const disabled = isToolDisabled(tool.name, tool.serverId);
+                                  return (
+                                    <ListItem
+                                      key={`${tool.serverId}-${tool.name}`}
+                                      sx={{
+                                        py: 0.8,
+                                        pl: 4,
+                                        pr: 2,
+                                        opacity: disabled ? 0.5 : 1,
+                                        transition: 'opacity 0.2s',
+                                      }}
+                                      secondaryAction={
+                                        <CustomSwitch
+                                          checked={!disabled}
+                                          onChange={(e) => handleToggleTool(tool.name, tool.serverId, e.target.checked)}
+                                        />
+                                      }
+                                    >
+                                      <ListItemText
+                                        primary={
+                                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                                            {tool.name}
+                                          </Typography>
+                                        }
+                                        secondary={
+                                          <Typography variant="caption" sx={{
+                                            color: 'text.secondary',
+                                            display: '-webkit-box',
+                                            WebkitLineClamp: 1,
+                                            WebkitBoxOrient: 'vertical',
+                                            overflow: 'hidden',
+                                          }}>
+                                            {tool.description || tool.serverName}
+                                          </Typography>
+                                        }
+                                      />
+                                    </ListItem>
+                                  );
+                                })}
+                              </List>
+                            </Collapse>
+                            <Divider />
+                          </React.Fragment>
+                        );
+                      })}
+                    </List>
+                  ) : hasActiveServers ? (
+                    <Box sx={{ px: 2, py: 3, textAlign: 'center', color: 'text.secondary' }}>
+                      <Typography variant="body2">活跃服务器暂无可用工具</Typography>
+                    </Box>
+                  ) : null}
+
+                  {/* ── 服务器管理（可折叠） ── */}
+                  <Box sx={{ mt: 1 }}>
+                    <ListItem
+                      component="div"
+                      onClick={() => setShowServers(!showServers)}
+                      sx={{
+                        cursor: 'pointer',
+                        py: 1,
+                        px: 2,
+                        '&:hover': { bgcolor: alpha(theme.palette.action.active, 0.04) },
+                      }}
+                    >
+                      <ListItemAvatar sx={{ minWidth: 44 }}>
+                        <Avatar sx={{ bgcolor: alpha('#2196f3', 0.1), width: 36, height: 36 }}>
+                          <Server size={18} color="#2196f3" />
+                        </Avatar>
+                      </ListItemAvatar>
+                      <ListItemText
+                        primary={
+                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                            服务器管理
+                          </Typography>
+                        }
+                        secondary={
+                          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
+                            {activeServers.length}/{servers.length} 个运行中
+                          </Typography>
+                        }
+                      />
+                      {showServers ? <ChevronDown size={18} style={{ opacity: 0.4 }} /> : <ChevronRight size={18} style={{ opacity: 0.4 }} />}
+                    </ListItem>
+                    <Collapse in={showServers} timeout="auto" unmountOnExit>
+                      <List disablePadding>
+                        {servers.map((server, index) => {
+                          const config = getServerConfig(server.type);
+                          const typeColor = config.color;
+                          return (
+                            <React.Fragment key={server.id}>
+                              <ListItem
+                                sx={{
+                                  pl: 4,
+                                  pr: 2,
+                                  py: 1,
+                                }}
+                                secondaryAction={
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    {loadingServers[server.id] && (
+                                      <CircularProgress size={16} sx={{ color: 'text.secondary' }} />
+                                    )}
+                                    <CustomSwitch
+                                      checked={server.isActive}
+                                      onChange={(e) => handleToggleServer(server.id, e.target.checked)}
+                                      disabled={loadingServers[server.id] || false}
+                                    />
+                                  </Box>
+                                }
+                              >
+                                <ListItemText
+                                  primary={
+                                    <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '0.85rem' }}>
+                                      {server.name}
+                                    </Typography>
+                                  }
+                                  secondary={
+                                    <Chip
+                                      label={config.label}
+                                      size="small"
+                                      sx={{
+                                        mt: 0.3,
+                                        height: 18,
+                                        fontSize: '0.65rem',
+                                        fontWeight: 500,
+                                        bgcolor: alpha(typeColor, 0.08),
+                                        color: typeColor,
+                                        border: 'none',
+                                      }}
+                                    />
+                                  }
+                                  secondaryTypographyProps={{ component: 'div' }}
+                                />
+                              </ListItem>
+                              {index < servers.length - 1 && <Divider component="li" sx={{ ml: 4 }} />}
+                            </React.Fragment>
+                          );
+                        })}
+                      </List>
+                    </Collapse>
+                  </Box>
+                </>
               )}
             </Box>
           </>
